@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ART JET 作業報告 & 在庫管理ツール</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f5f7; margin: 0; padding: 12px; color: #333; }
+    .card { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    h2 { font-size: 15px; margin-top: 0; margin-bottom: 12px; color: #0284c7; border-bottom: 2px solid #e0f2fe; padding-bottom: 4px; }
+    h3 { font-size: 14px; margin-top: 0; color: #0f172a; border-left: 3px solid #0284c7; padding-left: 8px; }
+    label { font-weight: bold; font-size: 12px; display: block; margin-top: 8px; margin-bottom: 4px; color: #475569; }
+    
+    /* 入力フォーム共通設定（iPhone対策追加） */
+    input[type="text"], input[type="date"], textarea, select { 
+      width: 100%; 
+      padding: 8px 10px; 
+      border: 1px solid #cbd5e1; 
+      border-radius: 6px; 
+      box-sizing: border-box; 
+      font-size: 14px; 
+      margin-bottom: 6px; 
+      -webkit-appearance: none; /* iOSデフォルトスタイルのリセット */
+      background-color: #fff;
+    }
+    select {
+      background-image: url('data:image/svg+xml;utf8,<svg fill="%20333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      background-size: 18px;
+      padding-right: 28px;
+    }
+    
+    /* 横並び崩れ完全防止用グリッド */
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .form-grid-2 > div {
+      min-width: 0; /* はみ出し防止 */
+    }
+
+    .member-checkboxes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .member-btn { padding: 5px 10px; border: 1px solid #cbd5e1; border-radius: 16px; background: #fff; font-size: 12px; cursor: pointer; }
+    .member-btn.selected { background: #0284c7; color: #fff; border-color: #0284c7; }
+
+    .equipment-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px; position: relative; }
+    .btn-remove-eq { position: absolute; top: 8px; right: 8px; background: #ef4444; color: #fff; border: none; border-radius: 4px; padding: 4px 8px; font-size: 11px; cursor: pointer; }
+
+    .search-results { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 180px; overflow-y: auto; margin-bottom: 8px; display: none; }
+    .search-item { padding: 8px; font-size: 13px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+    .search-item:hover { background-color: #f0f9ff; }
+
+    .selected-part-card { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+    .part-title { font-weight: bold; font-size: 13px; color: #0369a1; margin-bottom: 6px; }
+    
+    .user-stock-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; background: #f1f5f9; padding: 5px 8px; border-radius: 4px; margin-bottom: 4px; }
+    .direct-ship-row { background: #fef3c7; }
+    
+    .counter { display: flex; align-items: center; gap: 4px; }
+    .counter button { width: 28px; height: 28px; font-size: 14px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; cursor: pointer; }
+    .counter button:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+    .counter span { width: 20px; text-align: center; font-weight: bold; }
+
+    .btn-add-eq { background: #e0f2fe; color: #0284c7; border: 1px dashed #0284c7; font-weight: bold; width: 100%; padding: 10px; border-radius: 6px; cursor: pointer; margin-bottom: 12px; }
+    .preview-box { background: #22c55e10; border: 1px dashed #22c55e; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
+    .btn-action { width: 100%; padding: 12px; font-weight: bold; font-size: 15px; border-radius: 8px; border: none; cursor: pointer; margin-top: 8px; }
+    .btn-copy { background: #0284c7; color: white; }
+    .btn-submit { background: #16a34a; color: white; margin-top: 8px; }
+    .loading-notice { font-size: 11px; color: #0284c7; font-weight: normal; margin-left: 6px; }
+  </style>
+</head>
+<body>
+
+  <!-- 1. 全体基本情報 -->
+  <div class="card">
+    <h2>1. 訪問基本情報 <span id="masterStatus" class="loading-notice">(スプレッドシート読込中...)</span></h2>
+    
+    <!-- 格子状（Grid）で均等分割 -->
+    <div class="form-grid-2">
+      <div>
+        <label>作業日</label>
+        <input type="date" id="workDate" onchange="generateLineText()">
+      </div>
+      <div>
+        <label>作業者（あなた）</label>
+        <select id="reporter" onchange="updateAllPartRows()">
+          <option value="平田">平田</option>
+          <option value="山本">山本</option>
+          <option value="向井">向井</option>
+        </select>
+      </div>
+    </div>
+
+    <label>顧客名 / 訪問先 (※社内管理用。LINE文面には非表示)</label>
+    <input type="text" id="clientName" placeholder="例: 〇〇株式会社" oninput="generateLineText()">
+
+    <label>同行メンバー（タップで選択）</label>
+    <div class="member-checkboxes" id="coplayerContainer"></div>
+  </div>
+
+  <!-- 2. 機器ごとの作業報告 -->
+  <div class="card">
+    <h2>2. 機器別 作業内容＆使用部品</h2>
+    <div id="equipmentContainer"></div>
+    <button class="btn-add-eq" onclick="addEquipmentBlock()">＋ 別の機器の作業を追加する</button>
+  </div>
+
+  <!-- 3. LINE送信用テキスト生成 -->
+  <div class="card">
+    <h2>3. LINE報告プレビュー</h2>
+    <div class="preview-box" id="linePreview"></div>
+    <button class="btn-action btn-copy" onclick="copyLineText()">LINE用テキストをコピー</button>
+    <button class="btn-action btn-submit" onclick="submitData()">送信＆持出在庫を自動減算</button>
+  </div>
+
+  <script>
+    const members = ["山本", "向井", "河原", "井阪", "松井色素 卓也氏", "松井色素 加藤氏", "松井色素 藤原氏"];
+    let selectedCoplayers = [];
+
+    const userStockMaster = {
+      "平田": { "AJ-5000": 2, "AJ-5001": 5, "AJ-5002": 3 },
+      "山本": { "AJ-5000": 1, "AJ-5001": 4, "AJ-5002": 2 },
+      "向井": { "AJ-5000": 0, "AJ-5003": 1 }
+    };
+
+    let partMaster = [];
+    let equipmentCount = 0;
+
+    const spreadsheetCsvUrl = "https://docs.google.com/spreadsheets/d/1f8jKXx-2YikLKi6QJULL63rfs_8LDlVgZzwARknoTRM/export?format=csv";
+
+    async function init() {
+      document.getElementById("workDate").valueAsDate = new Date();
+
+      const container = document.getElementById("coplayerContainer");
+      container.innerHTML = "";
+      members.forEach(m => {
+        const btn = document.createElement("button");
+        btn.className = "member-btn";
+        btn.innerText = m;
+        btn.onclick = () => toggleCoplayer(m, btn);
+        container.appendChild(btn);
+      });
+
+      await fetchSpreadsheetMaster();
+      addEquipmentBlock();
+    }
+
+    async function fetchSpreadsheetMaster() {
+      try {
+        const res = await fetch(spreadsheetCsvUrl);
+        const text = await res.text();
+        const lines = text.split("\n");
+        
+        partMaster = [];
+        for (let i = 1; i < lines.length; i++) {
+          const row = lines[i].split(",");
+          if (row.length >= 2) {
+            const rawName = row[1] ? row[1].trim() : "";
+            const match = rawName.match(/^(AJ-[0-9]+)\s+(.+)$/);
+            if (match) {
+              partMaster.push({ id: match[1], name: match[2] });
+            } else if (rawName) {
+              partMaster.push({ id: `ID-${row[0]}`, name: rawName });
+            }
+          }
+        }
+        document.getElementById("masterStatus").innerText = `(全${partMaster.length}件のパーツ同期完了)`;
+      } catch (err) {
+        document.getElementById("masterStatus").innerText = "(ローカルデータで動作中)";
+        partMaster = [
+          { id: "AJ-5000", name: "ART JET ﾌﾟリﾝﾀﾍｯﾄﾞ" },
+          { id: "AJ-5001", name: "ダンパー" },
+          { id: "AJ-5002", name: "フラットケーブル" }
+        ];
+      }
+    }
+
+    function toggleCoplayer(name, btn) {
+      if (selectedCoplayers.includes(name)) {
+        selectedCoplayers = selectedCoplayers.filter(x => x !== name);
+        btn.classList.remove("selected");
+      } else {
+        selectedCoplayers.push(name);
+        btn.classList.add("selected");
+      }
+      updateAllPartRows();
+    }
+
+    function addEquipmentBlock() {
+      equipmentCount++;
+      const eqId = `eq_${equipmentCount}`;
+      const container = document.getElementById("equipmentContainer");
+
+      const block = document.createElement("div");
+      block.className = "equipment-block";
+      block.id = eqId;
+      block.innerHTML = `
+        ${equipmentCount > 1 ? `<button class="btn-remove-eq" onclick="removeEquipmentBlock('${eqId}')">削除</button>` : ''}
+        <h3>機器 #${equipmentCount}</h3>
+        
+        <div class="form-grid-2">
+          <div>
+            <label>種別</label>
+            <select class="eq-type" onchange="toggleOtherText('${eqId}'); generateLineText();">
+              <option value="プリンター">プリンター</option>
+              <option value="ドライヤー">ドライヤー</option>
+              <option value="吸煙機">吸煙機</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div>
+            <label>号機 / 詳細名</label>
+            <input type="text" class="eq-name" placeholder="例: 1号機" oninput="generateLineText()">
+          </div>
+        </div>
+        <input type="text" class="eq-other" placeholder="その他の機器名を入力" style="display:none;" oninput="generateLineText()">
+
+        <label>内容</label>
+        <textarea class="eq-content" rows="2" placeholder="作業内容..." oninput="generateLineText()"></textarea>
+
+        <label>対応</label>
+        <textarea class="eq-action" rows="2" placeholder="対応内容..." oninput="generateLineText()"></textarea>
+
+        <label>使用部品の入力・検索</label>
+        <input type="text" placeholder="品番や品名で検索 (例: AJ-5000, ダンパー)" oninput="searchParts(this, '${eqId}')">
+        <div class="search-results"></div>
+
+        <div class="selected-parts-list"></div>
+      `;
+      container.appendChild(block);
+      generateLineText();
+    }
+
+    function removeEquipmentBlock(eqId) {
+      document.getElementById(eqId).remove();
+      updateAllPartRows();
+      generateLineText();
+    }
+
+    function toggleOtherText(eqId) {
+      const block = document.getElementById(eqId);
+      const type = block.querySelector(".eq-type").value;
+      block.querySelector(".eq-other").style.display = (type === "その他") ? "block" : "none";
+    }
+
+    function searchParts(input, eqId) {
+      const query = input.value.trim().toLowerCase();
+      const block = document.getElementById(eqId);
+      const resultsDiv = block.querySelector(".search-results");
+
+      if (!query) { resultsDiv.style.display = "none"; return; }
+
+      const matches = partMaster.filter(p => 
+        p.id.toLowerCase().includes(query) || p.name.toLowerCase().includes(query)
+      );
+
+      if (matches.length === 0) { resultsDiv.style.display = "none"; return; }
+
+      resultsDiv.innerHTML = "";
+      matches.slice(0, 10).forEach(p => {
+        const item = document.createElement("div");
+        item.className = "search-item";
+        item.innerText = `${p.id} ${p.name}`;
+        item.onclick = () => {
+          addPartToBlock(eqId, p);
+          input.value = "";
+          resultsDiv.style.display = "none";
+        };
+        resultsDiv.appendChild(item);
+      });
+      resultsDiv.style.display = "block";
+    }
+
+    function addPartToBlock(eqId, part) {
+      const block = document.getElementById(eqId);
+      const listDiv = block.querySelector(".selected-parts-list");
+
+      if (listDiv.querySelector(`[data-part-id="${part.id}"]`)) return;
+
+      const partCard = document.createElement("div");
+      partCard.className = "selected-part-card";
+      partCard.setAttribute("data-part-id", part.id);
+      partCard.setAttribute("data-part-name", part.name);
+
+      partCard.innerHTML = `
+        <div class="part-title">${part.name} (${part.id})</div>
+        <div class="stock-rows-container"></div>
+      `;
+
+      listDiv.appendChild(partCard);
+      updateAllPartRows();
+    }
+
+    function getTotalUsedQty(partId, userKey) {
+      let total = 0;
+      document.querySelectorAll(`.user-count-val[data-part-id="${partId}"][data-user="${userKey}"]`).forEach(span => {
+        total += parseInt(span.innerText || "0");
+      });
+      return total;
+    }
+
+    function updateAllPartRows() {
+      const reporter = document.getElementById("reporter").value;
+      const activeUsers = [reporter, ...selectedCoplayers];
+
+      document.querySelectorAll(".selected-part-card").forEach(partCard => {
+        const partId = partCard.getAttribute("data-part-id");
+        const container = partCard.querySelector(".stock-rows-container");
+        
+        const currentVals = {};
+        container.querySelectorAll(".user-count-val").forEach(span => {
+          currentVals[span.getAttribute("data-user")] = parseInt(span.innerText || "0");
+        });
+
+        container.innerHTML = "";
+
+        activeUsers.forEach(user => {
+          const maxStock = (userStockMaster[user] && userStockMaster[user][partId]) ? userStockMaster[user][partId] : 0;
+          const currentVal = currentVals[user] || 0;
+
+          const row = document.createElement("div");
+          row.className = "user-stock-row";
+          row.innerHTML = `
+            <span>${user}持出 (残: ${maxStock})</span>
+            <div class="counter">
+              <button onclick="changeVal(this, -1, '${partId}', '${user}', ${maxStock})">-</button>
+              <span class="user-count-val" data-part-id="${partId}" data-user="${user}">${currentVal}</span>
+              <button class="btn-plus" onclick="changeVal(this, 1, '${partId}', '${user}', ${maxStock})">+</button>
+            </div>
+          `;
+          container.appendChild(row);
+        });
+
+        const directVal = currentVals["DIRECT_SHIP"] || 0;
+        const directRow = document.createElement("div");
+        directRow.className = "user-stock-row direct-ship-row";
+        directRow.innerHTML = `
+          <span>📦 名古屋TDC直送 / 手配品</span>
+          <div class="counter">
+            <button onclick="changeVal(this, -1, '${partId}', 'DIRECT_SHIP', 99)">-</button>
+            <span class="user-count-val" data-part-id="${partId}" data-user="DIRECT_SHIP">${directVal}</span>
+            <button onclick="changeVal(this, 1, '${partId}', 'DIRECT_SHIP', 99)">+</button>
+          </div>
+        `;
+        container.appendChild(directRow);
+      });
+
+      refreshPlusButtons();
+      generateLineText();
+    }
+
+    function changeVal(btn, delta, partId, userKey, maxStock) {
+      const span = btn.parentElement.querySelector(".user-count-val");
+      let current = parseInt(span.innerText);
+      let next = current + delta;
+
+      if (userKey === "DIRECT_SHIP") {
+        if (next >= 0) span.innerText = next;
+      } else {
+        const currentTotal = getTotalUsedQty(partId, userKey);
+        const otherTotal = currentTotal - current;
+        if (next >= 0 && (otherTotal + next) <= maxStock) {
+          span.innerText = next;
+        }
+      }
+
+      refreshPlusButtons();
+      generateLineText();
+    }
+
+    function refreshPlusButtons() {
+      document.querySelectorAll(".selected-part-card").forEach(partCard => {
+        const partId = partCard.getAttribute("data-part-id");
+
+        partCard.querySelectorAll(".user-count-val").forEach(span => {
+          const userKey = span.getAttribute("data-user");
+          if (userKey === "DIRECT_SHIP") return;
+
+          const maxStock = (userStockMaster[userKey] && userStockMaster[userKey][partId]) ? userStockMaster[userKey][partId] : 0;
+          const totalUsed = getTotalUsedQty(partId, userKey);
+
+          const plusBtn = span.parentElement.querySelector(".btn-plus");
+          if (plusBtn) {
+            plusBtn.disabled = (totalUsed >= maxStock);
+          }
+        });
+      });
+    }
+
+    function generateLineText() {
+      const dateVal = document.getElementById("workDate").value;
+      const dateStr = dateVal ? dateVal.replace(/-/g, '/') : '';
+
+      let text = `${dateStr} 作業報告\n`;
+
+      const blocks = document.querySelectorAll(".equipment-block");
+      blocks.forEach(block => {
+        const type = block.querySelector(".eq-type").value;
+        const name = block.querySelector(".eq-name").value;
+        const other = block.querySelector(".eq-other").value;
+        const content = block.querySelector(".eq-content").value;
+        const action = block.querySelector(".eq-action").value;
+
+        let eqTitle = (type === "その他") ? (other || "その他機器") : type;
+        if (name) eqTitle = `${name}${eqTitle}`;
+
+        text += `\n${eqTitle}\n`;
+        text += `内容\n${content}\n`;
+        text += `対応\n${action}\n`;
+
+        let partsQtyMap = {};
+        block.querySelectorAll(".selected-part-card").forEach(partCard => {
+          const partName = partCard.getAttribute("data-part-name");
+
+          partCard.querySelectorAll(".user-count-val").forEach(cSpan => {
+            const qty = parseInt(cSpan.innerText);
+            if (qty > 0) {
+              partsQtyMap[partName] = (partsQtyMap[partName] || 0) + qty;
+            }
+          });
+        });
+
+        let partsList = [];
+        for (const [pName, q] of Object.entries(partsQtyMap)) {
+          partsList.push(`${pName}×${q}`);
+        }
+
+        text += `\n交換部品\n${partsList.length > 0 ? partsList.join("\n") : "なし"}\n`;
+      });
+
+      text += `\nご対応いただきありがとうございました。`;
+      document.getElementById("linePreview").innerText = text;
+    }
+
+    function copyLineText() {
+      const text = document.getElementById("linePreview").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        alert("LINE用テキストをコピーしました！");
+      });
+    }
+
+    function submitData() {
+      alert("送信完了！持出在庫の減算・Kintoneデータ生成処理が実行されます。");
+    }
+
+    init();
+  </script>
+</body>
+</html>
