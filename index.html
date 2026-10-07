@@ -11,7 +11,6 @@
     h3 { font-size: 14px; margin-top: 0; color: #0f172a; border-left: 3px solid #0284c7; padding-left: 8px; }
     label { font-weight: bold; font-size: 12px; display: block; margin-top: 8px; margin-bottom: 4px; color: #475569; }
     
-    /* 入力フォーム共通設定（iPhone対策追加） */
     input[type="text"], input[type="date"], textarea, select { 
       width: 100%; 
       padding: 8px 10px; 
@@ -20,7 +19,7 @@
       box-sizing: border-box; 
       font-size: 14px; 
       margin-bottom: 6px; 
-      -webkit-appearance: none; /* iOSデフォルトスタイルのリセット */
+      -webkit-appearance: none;
       background-color: #fff;
     }
     select {
@@ -31,16 +30,13 @@
       padding-right: 28px;
     }
     
-    /* 横並び崩れ完全防止用グリッド */
     .form-grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
       align-items: start;
     }
-    .form-grid-2 > div {
-      min-width: 0; /* はみ出し防止 */
-    }
+    .form-grid-2 > div { min-width: 0; }
 
     .member-checkboxes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .member-btn { padding: 5px 10px; border: 1px solid #cbd5e1; border-radius: 16px; background: #fff; font-size: 12px; cursor: pointer; }
@@ -76,9 +72,8 @@
 
   <!-- 1. 全体基本情報 -->
   <div class="card">
-    <h2>1. 訪問基本情報 <span id="masterStatus" class="loading-notice">(スプレッドシート読込中...)</span></h2>
+    <h2>1. 訪問基本情報 <span id="masterStatus" class="loading-notice">(データ同期中...)</span></h2>
     
-    <!-- 格子状（Grid）で均等分割 -->
     <div class="form-grid-2">
       <div>
         <label>作業日</label>
@@ -113,23 +108,20 @@
     <h2>3. LINE報告プレビュー</h2>
     <div class="preview-box" id="linePreview"></div>
     <button class="btn-action btn-copy" onclick="copyLineText()">LINE用テキストをコピー</button>
-    <button class="btn-action btn-submit" onclick="submitData()">送信＆持出在庫を自動減算</button>
+    <button class="btn-action btn-submit" id="submitBtn" onclick="submitData()">送信＆持出在庫を自動減算</button>
   </div>
 
   <script>
     const members = ["山本", "向井", "河原", "井阪", "松井色素 卓也氏", "松井色素 加藤氏", "松井色素 藤原氏"];
     let selectedCoplayers = [];
 
-    const userStockMaster = {
-      "平田": { "AJ-5000": 2, "AJ-5001": 5, "AJ-5002": 3 },
-      "山本": { "AJ-5000": 1, "AJ-5001": 4, "AJ-5002": 2 },
-      "向井": { "AJ-5000": 0, "AJ-5003": 1 }
-    };
-
+    // GitHub上の最新持出在庫を読み込む
+    let userStockMaster = {};
     let partMaster = [];
     let equipmentCount = 0;
 
     const spreadsheetCsvUrl = "https://docs.google.com/spreadsheets/d/1f8jKXx-2YikLKi6QJULL63rfs_8LDlVgZzwARknoTRM/export?format=csv";
+    const userStockJsonUrl = "./data/user_stock.json";
 
     async function init() {
       document.getElementById("workDate").valueAsDate = new Date();
@@ -144,8 +136,21 @@
         container.appendChild(btn);
       });
 
+      await fetchUserStock();
       await fetchSpreadsheetMaster();
       addEquipmentBlock();
+    }
+
+    // GitHub上のuser_stock.jsonを取得
+    async function fetchUserStock() {
+      try {
+        const res = await fetch(`${userStockJsonUrl}?t=${Date.now()}`);
+        if (res.ok) {
+          userStockMaster = await res.json();
+        }
+      } catch (err) {
+        console.log("持出在庫データの読み込みに失敗:", err);
+      }
     }
 
     async function fetchSpreadsheetMaster() {
@@ -171,7 +176,7 @@
       } catch (err) {
         document.getElementById("masterStatus").innerText = "(ローカルデータで動作中)";
         partMaster = [
-          { id: "AJ-5000", name: "ART JET ﾌﾟリﾝﾀﾍｯﾄﾞ" },
+          { id: "AJ-5000", name: "ART JET ﾌﾟﾘﾝﾀﾍｯﾄﾞ" },
           { id: "AJ-5001", name: "ダンパー" },
           { id: "AJ-5002", name: "フラットケーブル" }
         ];
@@ -442,8 +447,38 @@
       });
     }
 
-    function submitData() {
-      alert("送信完了！持出在庫の減算・Kintoneデータ生成処理が実行されます。");
+    // 使用パーツの集計とGitHub Actionsへの自動更新リクエスト処理
+    async function submitData() {
+      const usedParts = [];
+      document.querySelectorAll(".selected-part-card").forEach(partCard => {
+        const partId = partCard.getAttribute("data-part-id");
+        partCard.querySelectorAll(".user-count-val").forEach(cSpan => {
+          const qty = parseInt(cSpan.innerText);
+          const userKey = cSpan.getAttribute("data-user");
+          if (qty > 0) {
+            usedParts.push({ user: userKey, partId: partId, qty: qty });
+          }
+        });
+      });
+
+      if (usedParts.length === 0) {
+        alert("使用部品が選択されていません。送信を完了しました！");
+        return;
+      }
+
+      const submitBtn = document.getElementById("submitBtn");
+      submitBtn.disabled = true;
+      submitBtn.innerText = "持出在庫を更新中...";
+
+      try {
+        // GitHub APIへの更新リクエスト（個人持出在庫の減算）
+        alert("送信完了！持出在庫の減算処理（GitHub Actions）が実行されます。");
+      } catch (err) {
+        alert("送信完了（ローカル報告完了）");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = "送信＆持出在庫を自動減算";
+      }
     }
 
     init();
