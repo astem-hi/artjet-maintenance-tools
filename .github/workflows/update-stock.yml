@@ -1,0 +1,47 @@
+name: Update Stock on Report Submit
+
+on:
+  repository_dispatch:
+    types: [submit_work_report]
+
+jobs:
+  update-stock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Update stock data
+        run: |
+          node -e '
+            const fs = require("fs");
+            const payload = ${{ toJson(github.event.client_payload) }};
+            const stockPath = "./data/user_stock.json";
+            
+            if (fs.existsSync(stockPath) && payload && payload.usedParts) {
+              let stock = JSON.parse(fs.readFileSync(stockPath, "utf8"));
+              payload.usedParts.forEach(item => {
+                const user = item.user;
+                const partId = item.partId;
+                const qty = item.qty;
+                if (user !== "DIRECT_SHIP" && stock[user] && stock[user][partId] !== undefined) {
+                  stock[user][partId] = Math.max(0, stock[user][partId] - qty);
+                }
+              });
+              fs.writeFileSync(stockPath, JSON.stringify(stock, null, 2));
+            }
+          '
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/user_stock.json
+          git status
+          git diff-index --quiet HEAD || git commit -m "Auto-update stock balance from work report"
+          git push
