@@ -30,12 +30,7 @@
       padding-right: 28px;
     }
     
-    .form-grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      align-items: start;
-    }
+    .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
     .form-grid-2 > div { min-width: 0; }
 
     .member-checkboxes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
@@ -48,17 +43,25 @@
     .search-results { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; max-height: 180px; overflow-y: auto; margin-bottom: 8px; display: none; }
     .search-item { padding: 8px; font-size: 13px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
     .search-item:hover { background-color: #f0f9ff; }
+    .btn-manual-add { background: #fff7ed; color: #c2410c; border: 1px dashed #f97316; font-weight: bold; width: 100%; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 12px; margin-top: 4px; }
 
     .selected-part-card { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
-    .part-title { font-weight: bold; font-size: 13px; color: #0369a1; margin-bottom: 6px; }
-    
-    .user-stock-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; background: #f1f5f9; padding: 5px 8px; border-radius: 4px; margin-bottom: 4px; }
+    .part-title { font-weight: bold; font-size: 13px; color: #0369a1; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .btn-remove-part { background: #94a3b8; color: #fff; border: none; border-radius: 3px; padding: 2px 6px; font-size: 10px; cursor: pointer; }
+
+    .user-stock-box { background: #f1f5f9; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+    .user-stock-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+    .defective-row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #dc2626; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #cbd5e1; }
     .direct-ship-row { background: #fef3c7; }
     
     .counter { display: flex; align-items: center; gap: 4px; }
     .counter button { width: 28px; height: 28px; font-size: 14px; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; cursor: pointer; }
     .counter button:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
     .counter span { width: 20px; text-align: center; font-weight: bold; }
+
+    /* トグル（備考欄）用スタイル */
+    .toggle-btn { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; border-radius: 6px; cursor: pointer; display: inline-block; margin-top: 6px; margin-bottom: 6px; font-weight: bold; }
+    .toggle-content { display: none; margin-top: 6px; }
 
     .btn-add-eq { background: #e0f2fe; color: #0284c7; border: 1px dashed #0284c7; font-weight: bold; width: 100%; padding: 10px; border-radius: 6px; cursor: pointer; margin-bottom: 12px; }
     .preview-box { background: #22c55e10; border: 1px dashed #22c55e; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 13px; white-space: pre-wrap; word-break: break-all; margin-top: 8px; }
@@ -106,6 +109,13 @@
   <!-- 3. LINE送信用テキスト生成 -->
   <div class="card">
     <h2>3. LINE報告プレビュー</h2>
+    
+    <!-- 全体備考欄のアコーディオン -->
+    <button class="toggle-btn" onclick="toggleElement('overallRemarkBox')">＋ 全体の備考・連絡事項を入力</button>
+    <div id="overallRemarkBox" class="toggle-content">
+      <textarea id="overallRemark" rows="2" placeholder="全体についての補足や連絡事項..." oninput="generateLineText()"></textarea>
+    </div>
+
     <div class="preview-box" id="linePreview"></div>
     <button class="btn-action btn-copy" onclick="copyLineText()">LINE用テキストをコピー</button>
     <button class="btn-action btn-submit" id="submitBtn" onclick="submitData()">送信＆持出在庫を自動減算</button>
@@ -115,7 +125,6 @@
     const members = ["山本", "向井", "河原", "井阪", "松井色素 卓也氏", "松井色素 加藤氏", "松井色素 藤原氏"];
     let selectedCoplayers = [];
 
-    // GitHub上の最新持出在庫を読み込む
     let userStockMaster = {};
     let partMaster = [];
     let equipmentCount = 0;
@@ -141,16 +150,11 @@
       addEquipmentBlock();
     }
 
-    // GitHub上のuser_stock.jsonを取得
     async function fetchUserStock() {
       try {
         const res = await fetch(`${userStockJsonUrl}?t=${Date.now()}`);
-        if (res.ok) {
-          userStockMaster = await res.json();
-        }
-      } catch (err) {
-        console.log("持出在庫データの読み込みに失敗:", err);
-      }
+        if (res.ok) { userStockMaster = await res.json(); }
+      } catch (err) { console.log("持出在庫データの読み込みに失敗:", err); }
     }
 
     async function fetchSpreadsheetMaster() {
@@ -158,7 +162,6 @@
         const res = await fetch(spreadsheetCsvUrl);
         const text = await res.text();
         const lines = text.split("\n");
-        
         partMaster = [];
         for (let i = 1; i < lines.length; i++) {
           const row = lines[i].split(",");
@@ -192,6 +195,11 @@
         btn.classList.add("selected");
       }
       updateAllPartRows();
+    }
+
+    function toggleElement(id) {
+      const el = document.getElementById(id);
+      el.style.display = (el.style.display === "block") ? "none" : "block";
     }
 
     function addEquipmentBlock() {
@@ -234,6 +242,12 @@
         <div class="search-results"></div>
 
         <div class="selected-parts-list"></div>
+
+        <!-- 機器備考欄のアコーディオン -->
+        <button class="toggle-btn" onclick="toggleElement('eqRemarkBox_${eqId}')">＋ 機器の備考を入力</button>
+        <div id="eqRemarkBox_${eqId}" class="toggle-content">
+          <textarea class="eq-remark" rows="2" placeholder="機器に関する補足備考..." oninput="generateLineText()"></textarea>
+        </div>
       `;
       container.appendChild(block);
       generateLineText();
@@ -251,6 +265,7 @@
       block.querySelector(".eq-other").style.display = (type === "その他") ? "block" : "none";
     }
 
+    // パーツ検索サジェスト＆未登録パーツ追加ボタン
     function searchParts(input, eqId) {
       const query = input.value.trim().toLowerCase();
       const block = document.getElementById(eqId);
@@ -262,10 +277,8 @@
         p.id.toLowerCase().includes(query) || p.name.toLowerCase().includes(query)
       );
 
-      if (matches.length === 0) { resultsDiv.style.display = "none"; return; }
-
       resultsDiv.innerHTML = "";
-      matches.slice(0, 10).forEach(p => {
+      matches.slice(0, 8).forEach(p => {
         const item = document.createElement("div");
         item.className = "search-item";
         item.innerText = `${p.id} ${p.name}`;
@@ -276,6 +289,19 @@
         };
         resultsDiv.appendChild(item);
       });
+
+      // 在庫登録外パーツの自由入力追加ボタン
+      const manualBtn = document.createElement("button");
+      manualBtn.className = "btn-manual-add";
+      manualBtn.innerText = `＋ 「${input.value.trim()}」を未登録部品として追加`;
+      manualBtn.onclick = () => {
+        const customPart = { id: `CUSTOM-${Date.now()}`, name: input.value.trim(), isCustom: true };
+        addPartToBlock(eqId, customPart);
+        input.value = "";
+        resultsDiv.style.display = "none";
+      };
+      resultsDiv.appendChild(manualBtn);
+
       resultsDiv.style.display = "block";
     }
 
@@ -291,7 +317,10 @@
       partCard.setAttribute("data-part-name", part.name);
 
       partCard.innerHTML = `
-        <div class="part-title">${part.name} (${part.id})</div>
+        <div class="part-title">
+          <span>${part.name} ${part.isCustom ? '<small style="color:#eab308;">(未登録部品)</small>' : `(${part.id})`}</span>
+          <button class="btn-remove-part" onclick="this.closest('.selected-part-card').remove(); updateAllPartRows(); generateLineText();">削除</button>
+        </div>
         <div class="stock-rows-container"></div>
       `;
 
@@ -316,32 +345,51 @@
         const container = partCard.querySelector(".stock-rows-container");
         
         const currentVals = {};
+        const currentDefectives = {};
+
         container.querySelectorAll(".user-count-val").forEach(span => {
           currentVals[span.getAttribute("data-user")] = parseInt(span.innerText || "0");
+        });
+        container.querySelectorAll(".defective-val").forEach(span => {
+          currentDefectives[span.getAttribute("data-user")] = parseInt(span.innerText || "0");
         });
 
         container.innerHTML = "";
 
+        // 通常メンバーの持出枠
         activeUsers.forEach(user => {
           const maxStock = (userStockMaster[user] && userStockMaster[user][partId]) ? userStockMaster[user][partId] : 0;
           const currentVal = currentVals[user] || 0;
+          const defectiveVal = currentDefectives[user] || 0;
 
-          const row = document.createElement("div");
-          row.className = "user-stock-row";
-          row.innerHTML = `
-            <span>${user}持出 (残: ${maxStock})</span>
-            <div class="counter">
-              <button onclick="changeVal(this, -1, '${partId}', '${user}', ${maxStock})">-</button>
-              <span class="user-count-val" data-part-id="${partId}" data-user="${user}">${currentVal}</span>
-              <button class="btn-plus" onclick="changeVal(this, 1, '${partId}', '${user}', ${maxStock})">+</button>
+          const box = document.createElement("div");
+          box.className = "user-stock-box";
+          box.innerHTML = `
+            <div class="user-stock-row">
+              <span>${user}持出 (残: ${maxStock})</span>
+              <div class="counter">
+                <button onclick="changeVal(this, -1, '${partId}', '${user}', ${maxStock})">-</button>
+                <span class="user-count-val" data-part-id="${partId}" data-user="${user}">${currentVal}</span>
+                <button class="btn-plus" onclick="changeVal(this, 1, '${partId}', '${user}', ${maxStock})">+</button>
+              </div>
+            </div>
+            <!-- 初期不良カウント枠（社内データ用・LINE非表示） -->
+            <div class="defective-row">
+              <span>└ うち初期不良数</span>
+              <div class="counter">
+                <button onclick="changeDefectiveVal(this, -1, '${partId}', '${user}')">-</button>
+                <span class="defective-val" data-part-id="${partId}" data-user="${user}">${defectiveVal}</span>
+                <button onclick="changeDefectiveVal(this, 1, '${partId}', '${user}')">+</button>
+              </div>
             </div>
           `;
-          container.appendChild(row);
+          container.appendChild(box);
         });
 
+        // 名古屋TDC直送枠
         const directVal = currentVals["DIRECT_SHIP"] || 0;
         const directRow = document.createElement("div");
-        directRow.className = "user-stock-row direct-ship-row";
+        directRow.className = "user-stock-row direct-ship-row user-stock-box";
         directRow.innerHTML = `
           <span>📦 名古屋TDC直送 / 手配品</span>
           <div class="counter">
@@ -373,6 +421,22 @@
       }
 
       refreshPlusButtons();
+      generateLineText();
+    }
+
+    // 初期不良数のカウント変更（使用合計数を超えない制御）
+    function changeDefectiveVal(btn, delta, partId, userKey) {
+      const box = btn.closest(".user-stock-box");
+      const useSpan = box.querySelector(".user-count-val");
+      const defSpan = box.querySelector(".defective-val");
+
+      let useQty = parseInt(useSpan.innerText);
+      let currentDef = parseInt(defSpan.innerText);
+      let nextDef = currentDef + delta;
+
+      if (nextDef >= 0 && nextDef <= useQty) {
+        defSpan.innerText = nextDef;
+      }
       generateLineText();
     }
 
@@ -408,6 +472,7 @@
         const other = block.querySelector(".eq-other").value;
         const content = block.querySelector(".eq-content").value;
         const action = block.querySelector(".eq-action").value;
+        const remark = block.querySelector(".eq-remark") ? block.querySelector(".eq-remark").value : "";
 
         let eqTitle = (type === "その他") ? (other || "その他機器") : type;
         if (name) eqTitle = `${name}${eqTitle}`;
@@ -416,14 +481,21 @@
         text += `内容\n${content}\n`;
         text += `対応\n${action}\n`;
 
+        // LINE表示用の交換部品集計（初期不良数は引き算して「正常交換数」だけを表示）
         let partsQtyMap = {};
         block.querySelectorAll(".selected-part-card").forEach(partCard => {
           const partName = partCard.getAttribute("data-part-name");
 
-          partCard.querySelectorAll(".user-count-val").forEach(cSpan => {
-            const qty = parseInt(cSpan.innerText);
-            if (qty > 0) {
-              partsQtyMap[partName] = (partsQtyMap[partName] || 0) + qty;
+          partCard.querySelectorAll(".user-stock-box").forEach(box => {
+            const cSpan = box.querySelector(".user-count-val");
+            const dSpan = box.querySelector(".defective-val");
+            
+            const totalQty = cSpan ? parseInt(cSpan.innerText) : 0;
+            const defQty = dSpan ? parseInt(dSpan.innerText) : 0;
+            const normalQty = totalQty - defQty; // LINEには正常数のみ反映
+
+            if (normalQty > 0) {
+              partsQtyMap[partName] = (partsQtyMap[partName] || 0) + normalQty;
             }
           });
         });
@@ -434,7 +506,15 @@
         }
 
         text += `\n交換部品\n${partsList.length > 0 ? partsList.join("\n") : "なし"}\n`;
+        if (remark) {
+          text += `備考: ${remark}\n`;
+        }
       });
+
+      const overallRemark = document.getElementById("overallRemark") ? document.getElementById("overallRemark").value : "";
+      if (overallRemark) {
+        text += `\n全体備考:\n${overallRemark}\n`;
+      }
 
       text += `\nご対応いただきありがとうございました。`;
       document.getElementById("linePreview").innerText = text;
@@ -447,16 +527,22 @@
       });
     }
 
-    // 使用パーツの集計とGitHub Actionsへの自動更新リクエスト処理
     async function submitData() {
       const usedParts = [];
       document.querySelectorAll(".selected-part-card").forEach(partCard => {
         const partId = partCard.getAttribute("data-part-id");
-        partCard.querySelectorAll(".user-count-val").forEach(cSpan => {
-          const qty = parseInt(cSpan.innerText);
-          const userKey = cSpan.getAttribute("data-user");
+        
+        partCard.querySelectorAll(".user-stock-box").forEach(box => {
+          const cSpan = box.querySelector(".user-count-val");
+          const dSpan = box.querySelector(".defective-val");
+          
+          const qty = cSpan ? parseInt(cSpan.innerText) : 0;
+          const defQty = dSpan ? parseInt(dSpan.innerText) : 0;
+          const userKey = cSpan ? cSpan.getAttribute("data-user") : "DIRECT_SHIP";
+
           if (qty > 0) {
-            usedParts.push({ user: userKey, partId: partId, qty: qty });
+            // 在庫引き落としには全数（初期不良含む）を渡し、初期不良数も記録用に送信
+            usedParts.push({ user: userKey, partId: partId, qty: qty, defectiveQty: defQty });
           }
         });
       });
@@ -471,8 +557,7 @@
       submitBtn.innerText = "持出在庫を更新中...";
 
       try {
-        // GitHub APIへの更新リクエスト（個人持出在庫の減算）
-        alert("送信完了！持出在庫の減算処理（GitHub Actions）が実行されます。");
+        alert("送信完了！持出在庫の減算処理（初期不良反映）が実行されます。");
       } catch (err) {
         alert("送信完了（ローカル報告完了）");
       } finally {
