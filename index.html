@@ -626,7 +626,7 @@
       });
     }
 
-    // 作業報告送信（在庫減算）
+// 作業報告送信（在庫減算）
     async function submitData() {
       const reporter = document.getElementById("reporter").value;
       const usedParts = [];
@@ -656,25 +656,24 @@
       submitBtn.disabled = true;
       submitBtn.innerText = "持出在庫を更新中...";
 
+      // ★ここに先ほどコピーしたGASのウェブアプリURLを貼り付けてください
+      const GAS_URL = "https://script.google.com/macros/s/AKfycbz3wX3EVhXkke8vDzy_JKGFR1tnZ_Bb4LcK7yiJgGkcHVVoOtbeIpAasKU5n3Vl5VEsqQ/exec";
+
       try {
-        const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/dispatches`, {
+        const response = await fetch(GAS_URL, {
           method: 'POST',
+          mode: 'no-cors', // GASへのPOSTでCORSエラーを防ぐため
           headers: {
-            'Accept': 'application/vnd.github.v3+json',
-            'Authorization': `token ${GITHUB_TOKEN}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'submit_work_report',
-            client_payload: { actionType: 'report', reporter: reporter, usedParts: usedParts }
+            actionType: 'report',
+            reporter: reporter,
+            usedParts: usedParts
           })
         });
 
-        if (response.ok) {
-          alert("送信完了！持出在庫の自動減算処理が実行されました。");
-        } else {
-          alert("送信エラー: GitHubへの通信に失敗しました。");
-        }
+        alert("送信完了！約15〜30秒後にGitHub上の持出在庫が自動更新されます。");
       } catch (err) {
         alert("通信エラーが発生しました: " + err.message);
       } finally {
@@ -705,25 +704,24 @@
       btn.disabled = true;
       btn.innerText = "入荷処理を実行中...";
 
+      // ★こちらにも同じGASのウェブアプリURLを貼り付けてください
+      const GAS_URL = "https://script.google.com/macros/s/AKfycbz3wX3EVhXkke8vDzy_JKGFR1tnZ_Bb4LcK7yiJgGkcHVVoOtbeIpAasKU5n3Vl5VEsqQ/exec";
+
       try {
-        const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/dispatches`, {
+        const response = await fetch(GAS_URL, {
           method: 'POST',
+          mode: 'no-cors',
           headers: {
-            'Accept': 'application/vnd.github.v3+json',
-            'Authorization': `token ${GITHUB_TOKEN}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            event_type: 'submit_work_report',
-            client_payload: { actionType: 'restock', reporter: reporter, restockItems: restockItems }
+            actionType: 'restock',
+            reporter: reporter,
+            restockItems: restockItems
           })
         });
 
-        if (response.ok) {
-          alert(`入荷処理完了！ ${reporter}様の持出在庫に加算されました。（数秒後に反映されます）`);
-        } else {
-          alert("送信エラー: GitHubへの通信に失敗しました。");
-        }
+        alert(`入荷処理の送信が完了しました！ ${reporter}様の持出在庫にまもなく反映されます。`);
       } catch (err) {
         alert("通信エラーが発生しました: " + err.message);
       } finally {
@@ -731,8 +729,3 @@
         btn.innerText = "指定した数量を入荷（補充）する";
       }
     }
-
-    init();
-  </script>
-</body>
-</html>
