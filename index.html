@@ -140,21 +140,19 @@
   <script>
     const members = ["山本", "向井", "河原", "井阪", "松井色素 卓也氏", "松井色素 加藤氏", "松井色素 藤原氏"];
     let selectedCoplayers = [];
-    let currentMode = "report"; // "report" or "restock"
+    let currentMode = "report";
 
     let userStockMaster = {};
     let partMaster = [];
     let equipmentCount = 0;
-    let restockSelectedParts = [];
 
     const spreadsheetCsvUrl = "https://docs.google.com/spreadsheets/d/1f8jKXx-2YikLKi6QJULL63rfs_8LDlVgZzwARknoTRM/export?format=csv";
     const userStockJsonUrl = "./data/user_stock.json";
+    
+    // ★先ほど作成したGASのウェブアプリURLをここに貼り付けてください
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbz3wX3EVhXkke8vDzy_JKGFR1tnZ_Bb4LcK7yiJgGkcHVVoOtbeIpAasKU5n3Vl5VEsqQ/exec";
 
-    const GITHUB_USER = "astem-hi";
-    const GITHUB_REPO = "artjet-maintenance-tools";
-    const GITHUB_TOKEN = "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"; // ご自身のトークンに書き換えてください
-
-async function init() {
+    async function init() {
       document.getElementById("workDate").valueAsDate = new Date();
 
       const container = document.getElementById("coplayerContainer");
@@ -174,40 +172,11 @@ async function init() {
         document.getElementById("masterStatus").innerText = "(スプレッドシートを読み込み中...)";
         await fetchSpreadsheetMaster();
       } catch (err) {
-        console.error("初期化処理でエラーが発生しました:", err);
-        document.getElementById("masterStatus").innerText = `(エラー: ${err.message})`;
-        alert("初期化エラー: " + err.message);
+        console.error("初期化エラー:", err);
+        document.getElementById("masterStatus").innerText = `(データ読込エラー)`;
       }
 
       addEquipmentBlock();
-    }
-
-    async function fetchUserStock() {
-      const res = await fetch(`${userStockJsonUrl}?t=${Date.now()}`);
-      if (!res.ok) throw new Error(`user_stock.jsonの取得に失敗しました (status: ${res.status})`);
-      userStockMaster = await res.json();
-    }
-
-    async function fetchSpreadsheetMaster() {
-      const res = await fetch(spreadsheetCsvUrl);
-      if (!res.ok) throw new Error(`スプレッドシートCSVの取得に失敗しました (status: ${res.status})`);
-      
-      const text = await res.text();
-      const lines = text.split("\n");
-      partMaster = [];
-      for (let i = 1; i < lines.length; i++) {
-        const row = lines[i].split(",");
-        if (row.length >= 2) {
-          const rawName = row[1] ? row[1].trim() : "";
-          const match = rawName.match(/^(AJ-[0-9]+)\s+(.+)$/);
-          if (match) {
-            partMaster.push({ id: match[1], name: match[2] });
-          } else if (rawName) {
-            partMaster.push({ id: `ID-${row[0]}`, name: rawName });
-          }
-        }
-      }
-      document.getElementById("masterStatus").innerText = `(全${partMaster.length}件のパーツ同期完了)`;
     }
 
     function switchMode(mode) {
@@ -243,39 +212,30 @@ async function init() {
     }
 
     async function fetchUserStock() {
-      try {
-        const res = await fetch(`${userStockJsonUrl}?t=${Date.now()}`);
-        if (res.ok) { userStockMaster = await res.json(); }
-      } catch (err) { console.log("持出在庫データの読み込みに失敗:", err); }
+      const res = await fetch(`${userStockJsonUrl}?t=${Date.now()}`);
+      if (!res.ok) throw new Error("user_stock.json取得失敗");
+      userStockMaster = await res.json();
     }
 
     async function fetchSpreadsheetMaster() {
-      try {
-        const res = await fetch(spreadsheetCsvUrl);
-        const text = await res.text();
-        const lines = text.split("\n");
-        partMaster = [];
-        for (let i = 1; i < lines.length; i++) {
-          const row = lines[i].split(",");
-          if (row.length >= 2) {
-            const rawName = row[1] ? row[1].trim() : "";
-            const match = rawName.match(/^(AJ-[0-9]+)\s+(.+)$/);
-            if (match) {
-              partMaster.push({ id: match[1], name: match[2] });
-            } else if (rawName) {
-              partMaster.push({ id: `ID-${row[0]}`, name: rawName });
-            }
+      const res = await fetch(spreadsheetCsvUrl);
+      if (!res.ok) throw new Error("スプレッドシート取得失敗");
+      const text = await res.text();
+      const lines = text.split("\n");
+      partMaster = [];
+      for (let i = 1; i < lines.length; i++) {
+        const row = lines[i].split(",");
+        if (row.length >= 2) {
+          const rawName = row[1] ? row[1].trim() : "";
+          const match = rawName.match(/^(AJ-[0-9]+)\s+(.+)$/);
+          if (match) {
+            partMaster.push({ id: match[1], name: match[2] });
+          } else if (rawName) {
+            partMaster.push({ id: `ID-${row[0]}`, name: rawName });
           }
         }
-        document.getElementById("masterStatus").innerText = `(全${partMaster.length}件のパーツ同期完了)`;
-      } catch (err) {
-        document.getElementById("masterStatus").innerText = "(ローカルデータで動作中)";
-        partMaster = [
-          { id: "AJ-5000", name: "ART JET ﾌﾟﾘﾝﾀﾍｯﾄﾞ" },
-          { id: "AJ-5001", name: "ダンパー" },
-          { id: "AJ-5002", name: "フラットケーブル" }
-        ];
       }
+      document.getElementById("masterStatus").innerText = `(全${partMaster.length}件のパーツ同期完了)`;
     }
 
     function toggleCoplayer(name, btn) {
@@ -416,7 +376,6 @@ async function init() {
       updateAllPartRows();
     }
 
-    // 入荷（補充）モード用のパーツ検索
     function searchRestockParts(input) {
       const query = input.value.trim().toLowerCase();
       const resultsDiv = document.getElementById("restockSearchResults");
@@ -664,7 +623,6 @@ async function init() {
       });
     }
 
-// 作業報告送信（在庫減算）
     async function submitData() {
       const reporter = document.getElementById("reporter").value;
       const usedParts = [];
@@ -694,23 +652,13 @@ async function init() {
       submitBtn.disabled = true;
       submitBtn.innerText = "持出在庫を更新中...";
 
-      // ★ここに先ほどコピーしたGASのウェブアプリURLを貼り付けてください
-      const GAS_URL = "https://script.google.com/macros/s/AKfycbz3wX3EVhXkke8vDzy_JKGFR1tnZ_Bb4LcK7yiJgGkcHVVoOtbeIpAasKU5n3Vl5VEsqQ/exec";
-
       try {
-        const response = await fetch(GAS_URL, {
+        await fetch(GAS_URL, {
           method: 'POST',
-          mode: 'no-cors', // GASへのPOSTでCORSエラーを防ぐため
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            actionType: 'report',
-            reporter: reporter,
-            usedParts: usedParts
-          })
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actionType: 'report', reporter: reporter, usedParts: usedParts })
         });
-
         alert("送信完了！約15〜30秒後にGitHub上の持出在庫が自動更新されます。");
       } catch (err) {
         alert("通信エラーが発生しました: " + err.message);
@@ -720,7 +668,6 @@ async function init() {
       }
     }
 
-    // 入荷（補充）処理の送信
     async function submitRestockData() {
       const reporter = document.getElementById("reporter").value;
       const restockItems = [];
@@ -742,23 +689,13 @@ async function init() {
       btn.disabled = true;
       btn.innerText = "入荷処理を実行中...";
 
-      // ★こちらにも同じGASのウェブアプリURLを貼り付けてください
-      const GAS_URL = "https://script.google.com/macros/s/AKfycbz3wX3EVhXkke8vDzy_JKGFR1tnZ_Bb4LcK7yiJgGkcHVVoOtbeIpAasKU5n3Vl5VEsqQ/exec";
-
       try {
-        const response = await fetch(GAS_URL, {
+        await fetch(GAS_URL, {
           method: 'POST',
           mode: 'no-cors',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            actionType: 'restock',
-            reporter: reporter,
-            restockItems: restockItems
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actionType: 'restock', reporter: reporter, restockItems: restockItems })
         });
-
         alert(`入荷処理の送信が完了しました！ ${reporter}様の持出在庫にまもなく反映されます。`);
       } catch (err) {
         alert("通信エラーが発生しました: " + err.message);
@@ -767,3 +704,8 @@ async function init() {
         btn.innerText = "指定した数量を入荷（補充）する";
       }
     }
+
+    init();
+  </script>
+</body>
+</html>
