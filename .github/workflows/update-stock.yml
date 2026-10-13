@@ -23,16 +23,37 @@ jobs:
             const payload = ${{ toJson(github.event.client_payload) }};
             const stockPath = "./data/user_stock.json";
             
-            if (fs.existsSync(stockPath) && payload && payload.usedParts) {
+            if (fs.existsSync(stockPath) && payload) {
               let stock = JSON.parse(fs.readFileSync(stockPath, "utf8"));
-              payload.usedParts.forEach(item => {
-                const user = item.user;
-                const partId = item.partId;
-                const qty = item.qty;
-                if (user !== "DIRECT_SHIP" && stock[user] && stock[user][partId] !== undefined) {
-                  stock[user][partId] = Math.max(0, stock[user][partId] - qty);
-                }
-              });
+              const actionType = payload.actionType || "report";
+              const reporter = payload.reporter || "不明";
+
+              console.log("Action Type:", actionType);
+              console.log("Operator:", reporter);
+
+              if (actionType === "report" && payload.usedParts) {
+                // 通常の作業報告（在庫減算）
+                payload.usedParts.forEach(item => {
+                  const user = item.user;
+                  const partId = item.partId;
+                  const qty = item.qty;
+                  if (user !== "DIRECT_SHIP" && stock[user] && stock[user][partId] !== undefined) {
+                    stock[user][partId] = Math.max(0, stock[user][partId] - qty);
+                  }
+                });
+              } else if (actionType === "restock" && payload.restockItems) {
+                // 入荷・補充処理（在庫加算：操作者の持出在庫にプラス）
+                payload.restockItems.forEach(item => {
+                  const user = item.user; // 操作者本人に加算
+                  const partId = item.partId;
+                  const qty = item.qty;
+                  
+                  if (!stock[user]) { stock[user] = {}; }
+                  if (stock[user][partId] === undefined) { stock[user][partId] = 0; }
+                  stock[user][partId] += qty;
+                });
+              }
+
               fs.writeFileSync(stockPath, JSON.stringify(stock, null, 2));
             }
           '
@@ -43,5 +64,5 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data/user_stock.json
           git status
-          git diff-index --quiet HEAD || git commit -m "Auto-update stock balance from work report"
+          git diff-index --quiet HEAD || git commit -m "Auto-update stock balance from mobile tool"
           git push
