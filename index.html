@@ -12,24 +12,17 @@
     label { font-weight: bold; font-size: 12px; display: block; margin-top: 8px; margin-bottom: 4px; color: #475569; }
     
     input[type="text"], input[type="date"], textarea, select { 
-      width: 100%; 
-      padding: 8px 10px; 
-      border: 1px solid #cbd5e1; 
-      border-radius: 6px; 
-      box-sizing: border-box; 
-      font-size: 14px; 
-      margin-bottom: 6px; 
-      -webkit-appearance: none;
-      background-color: #fff;
+      width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 14px; margin-bottom: 6px; -webkit-appearance: none; background-color: #fff;
     }
     select {
       background-image: url('data:image/svg+xml;utf8,<svg fill="%20333" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>');
-      background-repeat: no-repeat;
-      background-position: right 8px center;
-      background-size: 18px;
-      padding-right: 28px;
+      background-repeat: no-repeat; background-position: right 8px center; background-size: 18px; padding-right: 28px;
     }
     
+    .mode-selector { display: flex; gap: 8px; margin-bottom: 12px; }
+    .mode-btn { flex: 1; padding: 10px; font-weight: bold; font-size: 13px; border: 1px solid #cbd5e1; background: #f1f5f9; border-radius: 6px; cursor: pointer; text-align: center; }
+    .mode-btn.active { background: #0284c7; color: #fff; border-color: #0284c7; }
+
     .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
     .form-grid-2 > div { min-width: 0; }
 
@@ -59,7 +52,6 @@
     .counter button:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
     .counter span { width: 20px; text-align: center; font-weight: bold; }
 
-    /* トグル（備考欄）用スタイル */
     .toggle-btn { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; border-radius: 6px; cursor: pointer; display: inline-block; margin-top: 6px; margin-bottom: 6px; font-weight: bold; }
     .toggle-content { display: none; margin-top: 6px; }
 
@@ -68,22 +60,29 @@
     .btn-action { width: 100%; padding: 12px; font-weight: bold; font-size: 15px; border-radius: 8px; border: none; cursor: pointer; margin-top: 8px; }
     .btn-copy { background: #0284c7; color: white; }
     .btn-submit { background: #16a34a; color: white; margin-top: 8px; }
+    .btn-restock { background: #d97706; color: white; margin-top: 8px; }
     .loading-notice { font-size: 11px; color: #0284c7; font-weight: normal; margin-left: 6px; }
   </style>
 </head>
 <body>
 
-  <!-- 1. 全体基本情報 -->
+  <!-- モード切替ボタン -->
+  <div class="mode-selector">
+    <button class="mode-btn active" id="modeReportBtn" onclick="switchMode('report')">📝 作業報告 ＆ 減算</button>
+    <button class="mode-btn" id="modeRestockBtn" onclick="switchMode('restock')">📦 在庫入荷（補充）</button>
+  </div>
+
+  <!-- 1. 基本情報 -->
   <div class="card">
-    <h2>1. 訪問基本情報 <span id="masterStatus" class="loading-notice">(データ同期中...)</span></h2>
+    <h2>1. 担当者・基本情報 <span id="masterStatus" class="loading-notice">(データ同期中...)</span></h2>
     
     <div class="form-grid-2">
       <div>
-        <label>作業日</label>
+        <label>処理日</label>
         <input type="date" id="workDate" onchange="generateLineText()">
       </div>
       <div>
-        <label>作業者（あなた）</label>
+        <label>操作者（あなた）</label>
         <select id="reporter" onchange="updateAllPartRows()">
           <option value="平田">平田</option>
           <option value="山本">山本</option>
@@ -92,45 +91,68 @@
       </div>
     </div>
 
-    <label>顧客名 / 訪問先 (※社内管理用。LINE文面には非表示)</label>
-    <input type="text" id="clientName" placeholder="例: 〇〇株式会社" oninput="generateLineText()">
+    <div id="reportBasicFields">
+      <label>顧客名 / 訪問先 (※社内管理用)</label>
+      <input type="text" id="clientName" placeholder="例: 〇〇株式会社" oninput="generateLineText()">
 
-    <label>同行メンバー（タップで選択）</label>
-    <div class="member-checkboxes" id="coplayerContainer"></div>
+      <label>同行メンバー（タップで選択）</label>
+      <div class="member-checkboxes" id="coplayerContainer"></div>
+    </div>
   </div>
 
-  <!-- 2. 機器ごとの作業報告 -->
-  <div class="card">
+  <!-- 2. 作業内容 又は 入荷部品選択 -->
+  <div class="card" id="sectionWorkContent">
     <h2>2. 機器別 作業内容＆使用部品</h2>
     <div id="equipmentContainer"></div>
     <button class="btn-add-eq" onclick="addEquipmentBlock()">＋ 別の機器の作業を追加する</button>
   </div>
 
-  <!-- 3. LINE送信用テキスト生成 -->
-  <div class="card">
-    <h2>3. LINE報告プレビュー</h2>
+  <!-- 入荷（補充）用セクション -->
+  <div class="card" id="sectionRestockContent" style="display:none;">
+    <h2>2. 入荷・補充する部品の選択</h2>
+    <label>部品検索・追加</label>
+    <input type="text" placeholder="品番や品名で検索 (例: AJ-5000)" oninput="searchRestockParts(this)">
+    <div class="search-results" id="restockSearchResults"></div>
+
+    <div id="restockPartsList" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- 3. アクション（LINEプレビュー or 入荷送信） -->
+  <div class="card" id="sectionPreviewCard">
+    <h2 id="section3Title">3. LINE報告プレビュー</h2>
     
-    <!-- 全体備考欄のアコーディオン -->
-    <button class="toggle-btn" onclick="toggleElement('overallRemarkBox')">＋ 全体の備考・連絡事項を入力</button>
-    <div id="overallRemarkBox" class="toggle-content">
-      <textarea id="overallRemark" rows="2" placeholder="全体についての補足や連絡事項..." oninput="generateLineText()"></textarea>
+    <div id="reportActionArea">
+      <button class="toggle-btn" onclick="toggleElement('overallRemarkBox')">＋ 全体の備考・連絡事項を入力</button>
+      <div id="overallRemarkBox" class="toggle-content">
+        <textarea id="overallRemark" rows="2" placeholder="全体についての補足や連絡事項..." oninput="generateLineText()"></textarea>
+      </div>
+
+      <div class="preview-box" id="linePreview"></div>
+      <button class="btn-action btn-copy" onclick="copyLineText()">LINE用テキストをコピー</button>
+      <button class="btn-action btn-submit" id="submitBtn" onclick="submitData()">送信＆持出在庫を自動減算</button>
     </div>
 
-    <div class="preview-box" id="linePreview"></div>
-    <button class="btn-action btn-copy" onclick="copyLineText()">LINE用テキストをコピー</button>
-    <button class="btn-action btn-submit" id="submitBtn" onclick="submitData()">送信＆持出在庫を自動減算</button>
+    <div id="restockActionArea" style="display:none;">
+      <button class="btn-action btn-restock" id="restockSubmitBtn" onclick="submitRestockData()">指定した数量を入荷（補充）する</button>
+    </div>
   </div>
 
   <script>
     const members = ["山本", "向井", "河原", "井阪", "松井色素 卓也氏", "松井色素 加藤氏", "松井色素 藤原氏"];
     let selectedCoplayers = [];
+    let currentMode = "report"; // "report" or "restock"
 
     let userStockMaster = {};
     let partMaster = [];
     let equipmentCount = 0;
+    let restockSelectedParts = [];
 
     const spreadsheetCsvUrl = "https://docs.google.com/spreadsheets/d/1f8jKXx-2YikLKi6QJULL63rfs_8LDlVgZzwARknoTRM/export?format=csv";
     const userStockJsonUrl = "./data/user_stock.json";
+
+    const GITHUB_USER = "astem-hi";
+    const GITHUB_REPO = "artjet-maintenance-tools";
+    const GITHUB_TOKEN = "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"; // ご自身のトークンに書き換えてください
 
     async function init() {
       document.getElementById("workDate").valueAsDate = new Date();
@@ -148,6 +170,38 @@
       await fetchUserStock();
       await fetchSpreadsheetMaster();
       addEquipmentBlock();
+    }
+
+    function switchMode(mode) {
+      currentMode = mode;
+      const reportBtn = document.getElementById("modeReportBtn");
+      const restockBtn = document.getElementById("modeRestockBtn");
+      const reportFields = document.getElementById("reportBasicFields");
+      const workSection = document.getElementById("sectionWorkContent");
+      const restockSection = document.getElementById("sectionRestockContent");
+      const reportAction = document.getElementById("reportActionArea");
+      const restockAction = document.getElementById("restockActionArea");
+      const title3 = document.getElementById("section3Title");
+
+      if (mode === "report") {
+        reportBtn.classList.add("active");
+        restockBtn.classList.remove("active");
+        reportFields.style.display = "block";
+        workSection.style.display = "block";
+        restockSection.style.display = "none";
+        reportAction.style.display = "block";
+        restockAction.style.display = "none";
+        title3.innerText = "3. LINE報告プレビュー";
+      } else {
+        restockBtn.classList.add("active");
+        reportBtn.classList.remove("active");
+        reportFields.style.display = "none";
+        workSection.style.display = "none";
+        restockSection.style.display = "block";
+        reportAction.style.display = "none";
+        restockAction.style.display = "block";
+        title3.innerText = "3. 入荷処理の実行";
+      }
     }
 
     async function fetchUserStock() {
@@ -238,12 +292,11 @@
         <textarea class="eq-action" rows="2" placeholder="対応内容..." oninput="generateLineText()"></textarea>
 
         <label>使用部品の入力・検索</label>
-        <input type="text" placeholder="品番や品名で検索 (例: AJ-5000, ダンパー)" oninput="searchParts(this, '${eqId}')">
+        <input type="text" placeholder="品番や品名で検索" oninput="searchParts(this, '${eqId}')">
         <div class="search-results"></div>
 
         <div class="selected-parts-list"></div>
 
-        <!-- 機器備考欄のアコーディオン -->
         <button class="toggle-btn" onclick="toggleElement('eqRemarkBox_${eqId}')">＋ 機器の備考を入力</button>
         <div id="eqRemarkBox_${eqId}" class="toggle-content">
           <textarea class="eq-remark" rows="2" placeholder="機器に関する補足備考..." oninput="generateLineText()"></textarea>
@@ -265,7 +318,6 @@
       block.querySelector(".eq-other").style.display = (type === "その他") ? "block" : "none";
     }
 
-    // パーツ検索サジェスト＆未登録パーツ追加ボタン
     function searchParts(input, eqId) {
       const query = input.value.trim().toLowerCase();
       const block = document.getElementById(eqId);
@@ -290,7 +342,6 @@
         resultsDiv.appendChild(item);
       });
 
-      // 在庫登録外パーツの自由入力追加ボタン
       const manualBtn = document.createElement("button");
       manualBtn.className = "btn-manual-add";
       manualBtn.innerText = `＋ 「${input.value.trim()}」を未登録部品として追加`;
@@ -301,7 +352,6 @@
         resultsDiv.style.display = "none";
       };
       resultsDiv.appendChild(manualBtn);
-
       resultsDiv.style.display = "block";
     }
 
@@ -328,6 +378,65 @@
       updateAllPartRows();
     }
 
+    // 入荷（補充）モード用のパーツ検索
+    function searchRestockParts(input) {
+      const query = input.value.trim().toLowerCase();
+      const resultsDiv = document.getElementById("restockSearchResults");
+
+      if (!query) { resultsDiv.style.display = "none"; return; }
+
+      const matches = partMaster.filter(p => 
+        p.id.toLowerCase().includes(query) || p.name.toLowerCase().includes(query)
+      );
+
+      resultsDiv.innerHTML = "";
+      matches.slice(0, 8).forEach(p => {
+        const item = document.createElement("div");
+        item.className = "search-item";
+        item.innerText = `${p.id} ${p.name}`;
+        item.onclick = () => {
+          addRestockPart(p);
+          input.value = "";
+          resultsDiv.style.display = "none";
+        };
+        resultsDiv.appendChild(item);
+      });
+      resultsDiv.style.display = "block";
+    }
+
+    function addRestockPart(part) {
+      const listDiv = document.getElementById("restockPartsList");
+      if (listDiv.querySelector(`[data-part-id="${part.id}"]`)) return;
+
+      const card = document.createElement("div");
+      card.className = "selected-part-card restock-part-item";
+      card.setAttribute("data-part-id", part.id);
+      card.setAttribute("data-part-name", part.name);
+
+      card.innerHTML = `
+        <div class="part-title">
+          <span>${part.name} (${part.id})</span>
+          <button class="btn-remove-part" onclick="this.closest('.selected-part-card').remove();">削除</button>
+        </div>
+        <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px;">
+          <span>補充数量:</span>
+          <div class="counter">
+            <button onclick="changeRestockQty(this, -1)">-</button>
+            <span class="restock-qty-val">1</span>
+            <button onclick="changeRestockQty(this, 1)">+</button>
+          </div>
+        </div>
+      `;
+      listDiv.appendChild(card);
+    }
+
+    function changeRestockQty(btn, delta) {
+      const span = btn.parentElement.querySelector(".restock-qty-val");
+      let current = parseInt(span.innerText);
+      let next = current + delta;
+      if (next >= 1) span.innerText = next;
+    }
+
     function getTotalUsedQty(partId, userKey) {
       let total = 0;
       document.querySelectorAll(`.user-count-val[data-part-id="${partId}"][data-user="${userKey}"]`).forEach(span => {
@@ -343,6 +452,7 @@
       document.querySelectorAll(".selected-part-card").forEach(partCard => {
         const partId = partCard.getAttribute("data-part-id");
         const container = partCard.querySelector(".stock-rows-container");
+        if (!container) return;
         
         const currentVals = {};
         const currentDefectives = {};
@@ -356,7 +466,6 @@
 
         container.innerHTML = "";
 
-        // 通常メンバーの持出枠
         activeUsers.forEach(user => {
           const maxStock = (userStockMaster[user] && userStockMaster[user][partId]) ? userStockMaster[user][partId] : 0;
           const currentVal = currentVals[user] || 0;
@@ -373,7 +482,6 @@
                 <button class="btn-plus" onclick="changeVal(this, 1, '${partId}', '${user}', ${maxStock})">+</button>
               </div>
             </div>
-            <!-- 初期不良カウント枠（社内データ用・LINE非表示） -->
             <div class="defective-row">
               <span>└ うち初期不良数</span>
               <div class="counter">
@@ -386,7 +494,6 @@
           container.appendChild(box);
         });
 
-        // 名古屋TDC直送枠
         const directVal = currentVals["DIRECT_SHIP"] || 0;
         const directRow = document.createElement("div");
         directRow.className = "user-stock-row direct-ship-row user-stock-box";
@@ -424,7 +531,6 @@
       generateLineText();
     }
 
-    // 初期不良数のカウント変更（使用合計数を超えない制御）
     function changeDefectiveVal(btn, delta, partId, userKey) {
       const box = btn.closest(".user-stock-box");
       const useSpan = box.querySelector(".user-count-val");
@@ -443,7 +549,6 @@
     function refreshPlusButtons() {
       document.querySelectorAll(".selected-part-card").forEach(partCard => {
         const partId = partCard.getAttribute("data-part-id");
-
         partCard.querySelectorAll(".user-count-val").forEach(span => {
           const userKey = span.getAttribute("data-user");
           if (userKey === "DIRECT_SHIP") return;
@@ -452,9 +557,7 @@
           const totalUsed = getTotalUsedQty(partId, userKey);
 
           const plusBtn = span.parentElement.querySelector(".btn-plus");
-          if (plusBtn) {
-            plusBtn.disabled = (totalUsed >= maxStock);
-          }
+          if (plusBtn) { plusBtn.disabled = (totalUsed >= maxStock); }
         });
       });
     }
@@ -462,8 +565,9 @@
     function generateLineText() {
       const dateVal = document.getElementById("workDate").value;
       const dateStr = dateVal ? dateVal.replace(/-/g, '/') : '';
+      const reporter = document.getElementById("reporter").value;
 
-      let text = `${dateStr} 作業報告\n`;
+      let text = `${dateStr} 作業報告 (報告者: ${reporter})\n`;
 
       const blocks = document.querySelectorAll(".equipment-block");
       blocks.forEach(block => {
@@ -481,7 +585,6 @@
         text += `内容\n${content}\n`;
         text += `対応\n${action}\n`;
 
-        // LINE表示用の交換部品集計（初期不良数は引き算して「正常交換数」だけを表示）
         let partsQtyMap = {};
         block.querySelectorAll(".selected-part-card").forEach(partCard => {
           const partName = partCard.getAttribute("data-part-name");
@@ -492,7 +595,7 @@
             
             const totalQty = cSpan ? parseInt(cSpan.innerText) : 0;
             const defQty = dSpan ? parseInt(dSpan.innerText) : 0;
-            const normalQty = totalQty - defQty; // LINEには正常数のみ反映
+            const normalQty = totalQty - defQty;
 
             if (normalQty > 0) {
               partsQtyMap[partName] = (partsQtyMap[partName] || 0) + normalQty;
@@ -506,15 +609,11 @@
         }
 
         text += `\n交換部品\n${partsList.length > 0 ? partsList.join("\n") : "なし"}\n`;
-        if (remark) {
-          text += `備考: ${remark}\n`;
-        }
+        if (remark) { text += `備考: ${remark}\n`; }
       });
 
       const overallRemark = document.getElementById("overallRemark") ? document.getElementById("overallRemark").value : "";
-      if (overallRemark) {
-        text += `\n全体備考:\n${overallRemark}\n`;
-      }
+      if (overallRemark) { text += `\n全体備考:\n${overallRemark}\n`; }
 
       text += `\nご対応いただきありがとうございました。`;
       document.getElementById("linePreview").innerText = text;
@@ -527,7 +626,9 @@
       });
     }
 
+    // 作業報告送信（在庫減算）
     async function submitData() {
+      const reporter = document.getElementById("reporter").value;
       const usedParts = [];
       document.querySelectorAll(".selected-part-card").forEach(partCard => {
         const partId = partCard.getAttribute("data-part-id");
@@ -541,14 +642,13 @@
           const userKey = cSpan ? cSpan.getAttribute("data-user") : "DIRECT_SHIP";
 
           if (qty > 0) {
-            // 在庫引き落としには全数（初期不良含む）を渡し、初期不良数も記録用に送信
             usedParts.push({ user: userKey, partId: partId, qty: qty, defectiveQty: defQty });
           }
         });
       });
 
       if (usedParts.length === 0) {
-        alert("使用部品が選択されていません。送信を完了しました！");
+        alert("使用部品が選択されていません。");
         return;
       }
 
@@ -557,12 +657,78 @@
       submitBtn.innerText = "持出在庫を更新中...";
 
       try {
-        alert("送信完了！持出在庫の減算処理（初期不良反映）が実行されます。");
+        const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/dispatches`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            event_type: 'submit_work_report',
+            client_payload: { actionType: 'report', reporter: reporter, usedParts: usedParts }
+          })
+        });
+
+        if (response.ok) {
+          alert("送信完了！持出在庫の自動減算処理が実行されました。");
+        } else {
+          alert("送信エラー: GitHubへの通信に失敗しました。");
+        }
       } catch (err) {
-        alert("送信完了（ローカル報告完了）");
+        alert("通信エラーが発生しました: " + err.message);
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerText = "送信＆持出在庫を自動減算";
+      }
+    }
+
+    // 入荷（補充）処理の送信
+    async function submitRestockData() {
+      const reporter = document.getElementById("reporter").value;
+      const restockItems = [];
+
+      document.querySelectorAll("#restockPartsList .selected-part-card").forEach(card => {
+        const partId = card.getAttribute("data-part-id");
+        const qty = parseInt(card.querySelector(".restock-qty-val").innerText);
+        if (qty > 0) {
+          restockItems.push({ user: reporter, partId: partId, qty: qty });
+        }
+      });
+
+      if (restockItems.length === 0) {
+        alert("入荷・補充する部品が選択されていません。");
+        return;
+      }
+
+      const btn = document.getElementById("restockSubmitBtn");
+      btn.disabled = true;
+      btn.innerText = "入荷処理を実行中...";
+
+      try {
+        const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/dispatches`, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+            'Authorization': `token ${GITHUB_TOKEN}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            event_type: 'submit_work_report',
+            client_payload: { actionType: 'restock', reporter: reporter, restockItems: restockItems }
+          })
+        });
+
+        if (response.ok) {
+          alert(`入荷処理完了！ ${reporter}様の持出在庫に加算されました。（数秒後に反映されます）`);
+        } else {
+          alert("送信エラー: GitHubへの通信に失敗しました。");
+        }
+      } catch (err) {
+        alert("通信エラーが発生しました: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "指定した数量を入荷（補充）する";
       }
     }
 
